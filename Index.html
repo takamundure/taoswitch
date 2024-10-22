@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Offboarding Toolkit</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet">
+
+    <base target="_top">
+    <style>
+        .container {
+            margin-top: 30px;
+        }
+        .card-panel {
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .collection-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .output-area {
+            margin-top: 20px;
+        }
+        .checkmark {
+            color: green;
+        }
+        .cross {
+            color: red;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="row">
+        <h4>User Offboarding Toolkit</h4>
+
+        <div class="input-field col s6">
+            <input id="userEmail" type="email" class="validate" required aria-required="true" aria-label="Enter user email">
+            <label for="userEmail">User Email</label>
+        </div>
+        
+    </div>
+<!-- CSV File Upload 
+<div class="row">
+        
+    <div class="input-field">
+      <input type="file" id="csvFileInput" accept=".csv">
+      <label for="csvFileInput">Upload CSV File with Emails</label>
+    </div>
+</div>-->
+
+
+
+    <div class="row">
+        <div class="col s12">
+            <!-- <button class="btn waves-effect waves-light" onclick="refreshPage()">New</button> -->
+            <button class="btn waves-effect waves-light" onclick="confirmUpdate()">Run TAO Switch</button>
+            <button id="deleteUser" class="btn waves-effect waves-light red" onclick="deleteUser()">Delete Users</button>
+            <button class="btn waves-effect waves-light" type="button" onclick="uploadCSV()" disabled>Bulk Delete</button>
+            <!-- <button class="btn waves-effect waves-light" onclick="toggleCollapsible('revokeAppsContent')">Revoke Apps</button> -->
+            <!-- <button class="btn waves-effect waves-light blue" onclick="checkConnectedApps()">Check Connected Apps</button> -->
+            <button class="btn waves-effect waves-light" onclick="getUserDetails()">Get User Details</button>
+            <!-- <button class="btn waves-effect waves-light" onclick="transferUserData()">Transfer Calendar to Manager</button> -->
+            <!-- <button class="btn waves-effect waves-light" onclick="showUserGroups()">List My Google Groups</button> -->
+
+        </div>
+    </div>
+
+    <div id="userGroups"></div>
+
+    <div id="outputWindow"></div>
+
+    <div class="output-area">
+        <textarea id="taoOutput" rows="10" readonly style="width: 100%;"></textarea>
+    </div>
+
+    <div id="userDetailsContent" class="collapsible-content" style="display: none;">
+      <textarea id="userDetailsOutput" rows="10" readonly></textarea>
+    </div>
+
+    <div id="revokeAppsContent" class="collapsible-content">
+        <ul id="appList" class="app-list">
+            <li class="app-list-item pending" target="_blank">
+                <a href="https://adminconsole.foxit.com/userid_saml/usersAndGroup" target="_blank">FoxIT</a>
+                <input type="radio" name="foxit-status" id="foxit-revoked">
+                <label for="foxit-revoked">Open Link</label>
+            </li>
+            <!-- Add more apps as needed -->
+        </ul>
+    </div>
+
+    <div id="outputWindow" style="margin-top: 20px;" class="card-panel teal lighten-5">
+    </div>
+
+      <!-- Footer for displaying version and copyright -->
+  <footer id="footer" style="margin-top: 20px; text-align: center; font-size: 0.9em; color: #555;">
+    <!-- Version info will be inserted here by JavaScript -->
+  </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+
+    <script>
+       // Version number, update this with every new feature or version change
+        const version = "v4.3"; 
+
+        let currentlyOpen = null;
+
+        function focusEmailField() {
+            document.getElementById('userEmail').focus();
+        }
+
+        function reloadPage() {
+            location.reload(true);
+            setTimeout(focusEmailField, 100);
+        }
+
+function confirmUpdate() {
+    var userEmail = document.getElementById("userEmail").value;
+
+    if (!userEmail) {
+        M.toast({html: 'Error: Email address is required.', classes: 'red'});
+        focusEmailField(); // Focus back on the email field
+        return;
+    }
+
+    // Run TAO Switch
+    google.script.run.withSuccessHandler(function(response) {
+        var taoOutput = document.getElementById("taoOutput");
+        taoOutput.value = ''; // Clear previous output
+
+        if (response.status === 'success') {
+            M.toast({html: 'TAO Switch executed successfully!', classes: 'green'});
+
+            // Display the checklist
+            displayChecklist(response.checklist); // <-- Add this to handle the checklist output
+
+        } else {
+            M.toast({html: response.message, classes: 'red'});
+            taoOutput.value = response.errors.join('\n'); // Display errors in output
+        }
+        focusEmailField(); // Focus back on the email field
+    }).runTAOSwitch(userEmail);
+}
+
+function updateChecklist(results) {
+            const items = ['emailValidated', 'passwordUpdated', 'twoStepDisabled', 'passwordChangeDisabled', 
+                           'orgUnitChanged', 'connectedAppsRemoved', 'managerEmail', 
+                           'driveSizeRetrieved', 'rolesPrivileges', 'licenseInfo', 'tokensRevoked','signInCookiesStatus'];
+
+            items.forEach(item => {
+                const checklistItem = document.getElementById(item);
+                const icon = checklistItem.querySelector('.material-icons');
+
+                // Update icon based on result
+                if (results[item] === true) {
+                    icon.textContent = 'check_circle'; // Green checkmark
+                    icon.classList.add('checkmark');
+                    icon.classList.remove('cross');
+                } else {
+                    icon.textContent = 'cancel'; // Red cross
+                    icon.classList.add('cross');
+                    icon.classList.remove('checkmark');
+                }
+            });
+        }
+
+        function checkUserDetails() {
+            var userEmail = document.getElementById("userEmail").value;
+            var userDetailsOutput = document.getElementById("userDetailsOutput");
+
+            if (!userEmail) {
+                M.toast({html: 'Error: Email address is required.', classes: 'red'});
+                focusEmailField(); // Focus back on the email field
+                return;
+            }
+
+            google.script.run.withSuccessHandler(function(response) {
+                if (response.status === 'success') {
+                        M.toast({html: response.message, classes: 'green'});
+                        var output = `
+                          <h5>Offbaording Checklist</h5>
+                          <ul class="collection">
+                              <li class="collection-item">${response.checklist.userName} <i class="material-icons green-text">check</i></li>
+                              <li class="collection-item">${response.checklist.employeeId} <i class="material-icons green-text">check</i></li>
+                              <li class="collection-item">${response.checklist.managerEmail} <i class="material-icons green-text">check</i></li>
+                              <li class="collection-item">${response.checklist.drive} <i class="material-icons green-text">check</i></li>
+                          </ul>
+                          <h5>Reminder</h5>
+                          <p>${response.reminder}</p>
+                        `;
+                        document.getElementById('outputWindow').innerHTML = output;
+                } else {
+                    userDetailsOutput.value = response.message;
+                }
+            }).getUserDetails(userEmail);
+
+            toggleCollapsible('userDetailsContent');
+        }
+
+        function deleteUser() {
+            var userEmail = document.getElementById("userEmail").value;
+
+            if (!userEmail) {
+                M.toast({html: 'Error: Email address is required.', classes: 'red'});
+                focusEmailField(); // Focus back on the email field
+                return;
+            }
+
+            var warningMessage = "Once you delete this user, the user won't be able to access their account. Data will be available to restore for 90 days. Do you want to continue?";
+            if (confirm(warningMessage)) {
+                google.script.run.withSuccessHandler(function(response) {
+                    if (response.status === 'success') {
+                        M.toast({html: response.message, classes: 'green'});
+                        var output = `
+                          <h5>Deletion Checklist</h5>
+                          <ul class="collection">
+                              <li class="collection-item">${response.checklist.documents} <i class="material-icons green-text">check</i></li>
+                              <li class="collection-item">${response.checklist.emails} <i class="material-icons green-text">check</i></li>
+                              <li class="collection-item">${response.checklist.calendar} <i class="material-icons green-text">check</i></li>
+                              <li class="collection-item">${response.checklist.drive} <i class="material-icons green-text">check</i></li>
+                          </ul>
+                          <h5>Reminder</h5>
+                          <p>${response.reminder}</p>
+                        `;
+                        document.getElementById('outputWindow').innerHTML = output;
+                    } else {
+                        M.toast({html: response.message, classes: 'red'});
+                    }
+                }).deleteUserFromGoogleWorkspace(userEmail);
+            }
+        }
+
+        function toggleCollapsible(elementId) {
+            var content = document.getElementById(elementId);
+            content.style.display = (content.style.display === 'none' || content.style.display === '') ? 'block' : 'none';
+        }
+
+    function displayChecklist(checklist) {
+    const outputWindow = document.getElementById('outputWindow');
+    let outputHTML = '<h5>G-Offboarding Checklist</h5><ul class="collection">';
+
+    checklist.forEach(item => {
+        outputHTML += `
+            <li class="collection-item">
+                ${item.action}: 
+                <i class="material-icons ${item.status === 'approved' ? 'green-text' : 'red-text'}">
+                    ${item.status === 'approved' ? 'check_circle' : 'cancel'}
+                </i> 
+                - ${item.message}
+            </li>`;
+    });
+
+    outputHTML += '</ul>';
+    outputWindow.innerHTML = outputHTML; // Insert the checklist into the output window
+}
+
+function checkConnectedApps() {
+    var userEmail = document.getElementById("userEmail").value;
+
+    if (!userEmail) {
+        M.toast({html: 'Error: Email address is required.', classes: 'red'});
+        focusEmailField(); // Focus back on the email field
+        return;
+    }
+
+    // Call Google Apps Script function to check connected apps
+    google.script.run.withSuccessHandler(function(response) {
+        var outputWindow = document.getElementById("outputWindow");
+        var outputHTML = ''; // Initialize output
+
+        if (response.status === 'success') {
+            M.toast({html: 'Connected apps retrieved successfully.', classes: 'green'});
+            outputHTML = `<h5>Connected Apps</h5><p>Number of connected apps: ${response.appCount}</p>`;
+            
+            if (response.appCount > 0) {
+                outputHTML += '<ul class="collection">';
+                response.apps.forEach(app => {
+                    outputHTML += `<li class="collection-item">${app}</li>`;
+                });
+                outputHTML += '</ul>';
+            } else {
+                outputHTML += '<p>No connected apps found.</p>';
+            }
+
+        } else {
+            M.toast({html: response.message, classes: 'red'});
+            outputHTML = `<p>Error: ${response.message}</p>`;
+        }
+
+        outputWindow.innerHTML = outputHTML; // Insert the output into the output window
+    }).runCheckConnectedApps(userEmail);
+}
+
+// Function to call backend and get user details
+    function getUserDetails() {
+      var userEmail = document.getElementById("userEmail").value; // Assume there's an input for email
+
+      google.script.run.withSuccessHandler(displayUserDetails).getUserDetails(userEmail);
+    }
+
+    // Function to display user details in the frontend
+    function displayUserDetails(response) {
+      if (response.status === 'success') {
+        var userDetails = response.userDetails;
+
+        var outputHTML = `<ul class="collection">
+          <li class="collection-item"><strong>Full Name:</strong> ${userDetails.fullName}</li>
+          <li class="collection-item"><strong>Given Name:</strong> ${userDetails.givenName}</li>
+          <li class="collection-item"><strong>Family Name:</strong> ${userDetails.familyName}</li>
+          <li class="collection-item"><strong>Email:</strong> ${userDetails.primaryEmail}</li>
+          <li class="collection-item"><strong>Org Unit Path:</strong> ${userDetails.orgUnitPath}</li>
+          <li class="collection-item"><strong>Admin:</strong> ${userDetails.isAdmin}</li>
+          <li class="collection-item"><strong>Manager:</strong> ${userDetails.managerEmail}</li>
+          <li class="collection-item"><strong>2-Step Verification Enforced:</strong> ${userDetails.isEnforcedIn2Sv}</li>
+          <li class="collection-item"><strong>2-Step Verification Enrolled:</strong> ${userDetails.is2SvEnrolled}</li>
+          <li class="collection-item"><strong>Suspended:</strong> ${userDetails.suspended}</li>
+          <li class="collection-item"><strong>Last Login Time:</strong> ${userDetails.lastLoginTime}</li>
+          <li class="collection-item"><strong>Creation Time:</strong> ${userDetails.creationTime}</li>
+          <li class="collection-item"><strong>Agreed To Terms:</strong> ${userDetails.agreedToTerms}</li>
+          <li class="collection-item"><strong>Change Password At Next Login:</strong> ${userDetails.changePasswordAtNextLogin}</li>
+          <li class="collection-item"><strong>Phones:</strong> ${JSON.stringify(userDetails.phones)}</li>
+          <li class="collection-item"><strong>Addresses:</strong> ${JSON.stringify(userDetails.addresses)}</li>
+          <li class="collection-item"><strong>Emails:</strong> ${JSON.stringify(userDetails.emails)}</li>
+          <li class="collection-item"><strong>Aliases:</strong> ${JSON.stringify(userDetails.aliases)}</li>
+          <li class="collection-item"><strong>Delegated Admin:</strong> ${userDetails.isDelegatedAdmin}</li>
+          <li class="collection-item"><strong>Archived:</strong> ${userDetails.archived}</li>
+          <li class="collection-item"><strong>Customer ID:</strong> ${userDetails.customerId}</li>
+          <li class="collection-item"><strong>ID:</strong> ${userDetails.id}</li>
+          <li class="collection-item"><strong>IP Whitelisted:</strong> ${userDetails.ipWhitelisted}</li>
+          <li class="collection-item"><strong>Thumbnail Photo URL:</strong> <img src="${userDetails.thumbnailPhotoUrl}" alt="User Photo" /></li>
+        </ul>`
+        ;
+
+        document.getElementById("outputWindow").innerHTML = outputHTML;
+
+      } else {
+        document.getElementById("outputWindow").innerHTML = `<p>${response.message}</p>`;
+      }
+    }
+
+        // Function to handle CSV file upload
+    function uploadCSV() {
+      const fileInput = document.getElementById("csvFileInput");
+      const file = fileInput.files[0];
+
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          const csvContent = event.target.result;
+          confirmAndDeleteUsers(csvContent);
+        };
+        reader.readAsText(file);
+      } else {
+        alert("Please select a CSV file.");
+      }
+    }
+
+    // Function to confirm and delete users from CSV
+    function confirmAndDeleteUsers(csvContent) {
+      const confirmation = confirm("Are you sure you want to delete the users from the uploaded CSV file?");
+      if (confirmation) {
+        google.script.run.withSuccessHandler(displayDeletedUsers).deleteUsersFromCSV(csvContent);
+      }
+    }
+
+    // Function to display the deleted users
+    function displayDeletedUsers(response) {
+      let resultHTML = `<h5>Deleted Users</h5><ul class="collection">`;
+
+      if (response.deletedUsers.length > 0) {
+        response.deletedUsers.forEach(email => {
+          resultHTML += `<li class="collection-item">${email}</li>`;
+        });
+      } else {
+        resultHTML += `<li class="collection-item">No users deleted.</li>`;
+      }
+
+      if (response.invalidEmails.length > 0) {
+        resultHTML += `<h5>Invalid Emails</h5>`;
+        response.invalidEmails.forEach(email => {
+          resultHTML += `<li class="collection-item">${email} - Invalid Email Format</li>`;
+        });
+      }
+
+      resultHTML += `</ul>`;
+      document.getElementById("outputWindow").innerHTML = resultHTML;
+    }
+
+//show user groups
+    function showUserGroups() {
+      google.script.run.withSuccessHandler(displayUserGroups).listUserGroups();
+    }
+
+    function displayUserGroups(groups) {
+      const userGroupsDiv = document.getElementById('userGroups');
+      userGroupsDiv.innerHTML = ''; // Clear previous results
+
+      if (groups.length === 0) {
+        userGroupsDiv.innerHTML = 'You are not a member of any groups.';
+        return;
+      }
+
+      const checklist = document.createElement('ul');
+      groups.forEach(group => {
+        const listItem = document.createElement('li');
+        listItem.innerHTML = `<input type="checkbox" checked> ${group}`;
+        checklist.appendChild(listItem);
+      });
+
+      userGroupsDiv.appendChild(checklist);
+    }
+
+    // Refresh the page and focus on the email input field
+    function refreshPage() {
+      // Reload the page
+      window.location.reload();
+      
+      // Focus on the email input field after the page is reloaded
+      window.onload = function() {
+        document.getElementById('emailField').focus();
+      };
+    }
+
+        // function to confirm and initiate the transfer process
+    function transferUserData() {
+      let userEmail = document.getElementById("userEmail").value;
+
+      if (userEmail) {
+        // Ask for confirmation with a dialogue box
+        let confirmation = confirm(`Are you sure you want to transfer the Google Calendar from ${userEmail} to their manager? This process will release all events and resources.`);
+        
+        if (confirmation) {
+          // Call the Apps Script backend to handle the transfer
+          google.script.run.withSuccessHandler(displayTransferStatus).initiateCalendarTransfer(userEmail);
+        }
+      } else {
+        alert('Please enter a valid email address.');
+      }
+    }
+
+    // Function to display the transfer status checklist in the output window
+    function displayTransferStatus(status) {
+      let outputWindow = document.getElementById('outputWindow');
+      outputWindow.innerHTML = status; // This will show the checklist from the backend
+    }
+
+        // Function to load the version number into the footer
+    function loadFooter() {
+      let footer = document.getElementById('footer');
+      let currentYear = new Date().getFullYear();
+      footer.innerHTML = `&copy; ${currentYear} ApplyBoard. All rights reserved. Version: ${version}. TAO Switch`;
+    }
+    
+    // Call loadFooter when the page loads
+    window.onload = loadFooter;
+    </script>
+</div>
+</body>
+</html>
